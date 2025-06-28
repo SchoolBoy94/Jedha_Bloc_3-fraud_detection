@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: fraud_postgres
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: airflow,fraud,mlflow
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
+    ports:
+      - "5432:5432"
+
+  airflow-webserver:
+    image: apache/airflow:2.7.3-python3.9
+    container_name: airflow_webserver
+    restart: always
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+      - ./reports:/opt/airflow/reports
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "pip install -r /requirements.txt &&
+               airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+               airflow webserver"
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.3-python3.9
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow-webserver
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+      - ./reports:/opt/airflow/reports
+    command: >
+      bash -c "pip install -r /requirements.txt &&
+               airflow scheduler"
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow
+    restart: always
+    env_file: .env
+    environment:
+      BACKEND_STORE_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      ARTIFACT_ROOT: /mlruns
+    volumes:
+      - ./mlruns:/mlruns
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      --default-artifact-root mlflow-artifacts:/
+      --serve-artifacts
+      --artifacts-destination /mlruns
+      --host 0.0.0.0
+      --port 5000
+
+volumes:
+  pg_data:
