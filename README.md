@@ -85,3 +85,6 @@ Voir la liste complète dans `.env`.
 ### Licence
 
 MIT — utilisation, modification et partage libres. Contributions bienvenues !
+
+![Python](https://img.shields.io/badge/lang-Python-blue)
+![YAML](https://img.shields.io/badge/lang–YAML-blueviolet)
