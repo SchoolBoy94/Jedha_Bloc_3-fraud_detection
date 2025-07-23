@@ -34,24 +34,33 @@ docker compose up -d --build
 ## 3 · Organisation du dépôt
 
 ```
-project/
-├── dags/
-│   ├── train_and_promote_model_dag.py   # Entraînement hebdomadaire + promotion MLflow
-│   ├── fraud_detection_dag.py          # Scoring temps réel toutes les 5 min
-│   ├── daily_reporting_dag.py          # Export CSV des fraudes de J-1
-│   └── daily_online_metrics.py         # Calcul quotidien des métriques en ligne
-├── scripts/
-│   ├── train_gb_model.py               # Entraînement GradientBoosting standalone
-│   ├── realtime_predict.py             # Scoring temps réel + archivage + alertes
-│   └── utils/
-│       └── mlflow_utils.py             # Helpers MLflow (chargement, promotion)
-├── data/                               # CSV montés (fraudTest.csv, archives)
-├── mlruns/                             # Artifacts & registre MLflow
-├── reports/                            # Sortie des rapports CSV Airflow
-├── docker-compose.yml                  # Orchestration Docker (Postgres, Airflow, MLflow)
-├── Dockerfile.mlflow                   # Image MLflow avec psycopg2
-├── requirements.txt                    # Dépendances Python
-└── .env                                # Variables d’environnement
+│   .env
+│   docker-compose.yml
+│   requirements.txt
+│
+├───dags
+│       dag_1.py
+│       dag_2.py
+│       dag_3_data_quality.py
+│
+├───data
+├───init
+│       init-multiple-db.sh
+│
+├───monitoring
+│   └───prometheus.yml
+├───reports
+└───scripts
+        config.py
+        consume.py
+        create_tables.py
+        data_quality.py
+        etl_utils.py
+        extract.py
+        migrate_t1_to_t2.py
+        store_csv_to_t1.py
+        transform.py
+        __init__.py
 ```
 
 ---
