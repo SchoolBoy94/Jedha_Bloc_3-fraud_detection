@@ -1,7 +1,0 @@
-pandas
-scikit-learn
-mlflow==2.11.1
-joblib
-psycopg2-binary
-requests
-matplotlib
