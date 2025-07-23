@@ -1,0 +1,146 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: fraud_postgres
+    restart: always
+    env_file: .env
+    environment:
+      POSTGRES_MULTIPLE_DATABASES: airflow,fraud,mlflow
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init/init-multiple-db.sh:/docker-entrypoint-initdb.d/init-multiple-db.sh
+    ports:
+      - "5432:5432"
+
+  airflow-webserver:
+    image: apache/airflow:2.7.3-python3.9
+    container_name: airflow_webserver
+    restart: always
+    depends_on:
+      - postgres
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      PYTHONPATH: /opt/airflow/scripts
+      AIRFLOW__METRICS__STATSD_ON: "True"
+      AIRFLOW__METRICS__STATSD_HOST: "statsd"
+      AIRFLOW__METRICS__STATSD_PORT: "8125"
+      AIRFLOW__METRICS__STATSD_PREFIX: "airflow"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "pip install -r /requirements.txt &&
+               airflow db init &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
+               airflow webserver"
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.3-python3.9
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow-webserver
+    env_file: .env
+    environment:
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+      PYTHONPATH: /opt/airflow/scripts
+      AIRFLOW__METRICS__STATSD_ON: "True"
+      AIRFLOW__METRICS__STATSD_HOST: "statsd"
+      AIRFLOW__METRICS__STATSD_PORT: "8125"
+      AIRFLOW__METRICS__STATSD_PREFIX: "airflow"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./requirements.txt:/requirements.txt
+      - ./data:/opt/airflow/data
+    command: >
+      bash -c "pip install -r /requirements.txt &&
+               airflow scheduler"
+
+  # ─────── PROMETHEUS ───────
+  # prometheus:
+  #   image: prom/prometheus
+  #   container_name: prometheus
+  #   restart: always
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   ports:
+  #     - "9090:9090"
+
+  # statsd:
+  #   image: prom/statsd-exporter
+  #   container_name: statsd
+  #   ports:
+  #     - "9102:9102" # port Prometheus pour scrapper
+  #   command:
+  #     - "--statsd.listen-udp=:8125"
+  #     - "--web.listen-address=:9102"
+
+  # # ─────── GRAFANA ───────
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: grafana
+  #   restart: always
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    restart: always
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+
+  kafka-cli:
+    image: bitnami/kafka:latest
+    container_name: kafka_cli
+    depends_on:
+      - kafka
+    entrypoint: /bin/bash
+    tty: true
+    networks:
+      - default
+
+volumes:
+  pg_data:
+  grafana_data:
